@@ -1,9 +1,9 @@
-name: Deploy Frontend
+name: Deploy Frontend (S3 to Amplify)
 
 on:
   push:
     branches:
-      - main
+      - main  # Trigger on pushes to the main branch
 
 jobs:
   deploy-s3:
@@ -20,34 +20,46 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ secrets.AWS_REGION }}
 
-    - name: Sync to S3
-      run: |
-        # Syncs the contents of the frontend folder to the root of the bucket
-        aws s3 sync . s3://${{ secrets.S3_BUCKET_NAME }} --delete
-
-    # --- NEW: Install jq for JSON parsing ---
     - name: Install jq
-      run: sudo apt-get install -y jq
+      # jq is needed to parse JSON output and extract the upload URL
+      run: sudo apt-get update && sudo apt-get install -y jq
 
-    - name: Create and Start Amplify Deployment
+    - name: Prepare Frontend Artifact
+      # Create a single ZIP file of all frontend files in the current directory
       run: |
-        # 2. Create the deployment job and capture the jobId
+        zip -r frontend-artifact.zip .
+
+    - name: Create and Upload Deployment
+      id: amplify_deploy
+      run: |
+        # 1. Create the deployment job and capture the upload URL and jobId
         DEPLOYMENT_INFO=$(aws amplify create-deployment \
           --app-id ${{ secrets.AMPLIFY_APP_ID }} \
           --branch-name ${{ secrets.AMPLIFY_BRANCH_NAME }})
 
+        UPLOAD_URL=$(echo $DEPLOYMENT_INFO | jq -r '.uploadUrl')
         JOB_ID=$(echo $DEPLOYMENT_INFO | jq -r '.jobId')
 
-        if [ -z "$JOB_ID" ]; then
-          echo "Error: Failed to retrieve jobId from Amplify API."
+        if [ -z "$JOB_ID" ] || [ -z "$UPLOAD_URL" ]; then
+          echo "Error: Failed to retrieve upload URL or jobId from Amplify API."
           exit 1
         fi
 
         echo "Created Amplify Deployment Job ID: $JOB_ID"
+        echo "Uploading artifact to: $UPLOAD_URL"
 
-        # 3. Start the deployment using the files already in the S3 bucket
+        # 2. Upload the zipped file directly to the temporary S3 URL using curl
+        # Note: curl is used for direct upload because aws s3 cp/sync is not suitable here
+        curl -X PUT -T frontend-artifact.zip "$UPLOAD_URL"
+
+        # Pass the JOB_ID to the next step
+        echo "JOB_ID=$JOB_ID" >> $GITHUB_ENV
+
+
+    - name: Start Amplify Deployment
+      run: |
+        # 3. Start the deployment using the job ID from the previous step
         aws amplify start-deployment \
           --app-id ${{ secrets.AMPLIFY_APP_ID }} \
           --branch-name ${{ secrets.AMPLIFY_BRANCH_NAME }} \
-          --job-id $JOB_ID \
-          --source-url http://${{ secrets.S3_BUCKET_NAME }}.s3.${{ secrets.AWS_REGION }}.amazonaws.com/
+          --job-id ${{ env.JOB_ID }}
