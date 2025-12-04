@@ -1,0 +1,34 @@
+name: Deploy Frontend
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy-s3:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Sync to S3
+      run: |
+        # Syncs the contents of the frontend folder to the root of the bucket
+        aws s3 sync . s3://${{ secrets.S3_BUCKET_NAME }} --delete
+
+    - name: Start Amplify Deployment
+      run: |
+        # 2. Tell Amplify to pull the new content from S3
+        amplify publish \
+          --app-id YOUR_AMPLIFY_APP_ID \
+          --env YOUR_AMPLIFY_BRANCH_NAME \
+          --yes

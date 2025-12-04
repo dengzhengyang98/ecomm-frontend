@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>产品生成</title>
+    <style>
+        body { font-family: Arial; margin: 40px; max-width: 900px; }
+        textarea { width: 100%; height: 150px; padding: 10px; font-size: 14px; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .output-section { margin-top: 30px; }
+        .output-box { 
+            border: 1px solid #ddd; 
+            border-radius: 4px; 
+            margin-bottom: 20px; 
+            background: #f9f9f9;
+        }
+        .output-header { 
+            background: #f0f0f0; 
+            padding: 10px 15px; 
+            font-weight: bold; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            border-bottom: 1px solid #ddd;
+        }
+        .output-content { 
+            padding: 15px; 
+            white-space: pre-wrap; 
+            min-height: 60px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .copy-btn { 
+            padding: 5px 12px; 
+            font-size: 13px; 
+            cursor: pointer; 
+            background: #28a745; 
+            color: white; 
+            border: none; 
+            border-radius: 3px;
+        }
+        .copy-btn:hover { background: #218838; }
+        .copy-btn:active { background: #1e7e34; }
+        .copied { background: #6c757d !important; }
+    </style>
+</head>
+<body>
+<h2>产品生成</h2>
+<textarea id="inputBox" placeholder="输入产品信息..."></textarea>
+<br><br>
+<button id="genBtn" onclick="generate()">Generate</button>
+
+<div class="output-section">
+    <div class="output-box">
+        <div class="output-header">
+            <span>产品标题</span>
+            <button class="copy-btn" onclick="copyToClipboard('title')">复制</button>
+        </div>
+        <div class="output-content" id="title">等待生成...</div>
+    </div>
+
+    <div class="output-box">
+        <div class="output-header">
+            <span>产品要点</span>
+            <button class="copy-btn" onclick="copyToClipboard('bulletPoint')">复制</button>
+        </div>
+        <div class="output-content" id="bulletPoint">等待生成...</div>
+    </div>
+
+    <div class="output-box">
+        <div class="output-header">
+            <span>产品描述</span>
+            <button class="copy-btn" onclick="copyToClipboard('description')">复制</button>
+        </div>
+        <div class="output-content" id="description">等待生成...</div>
+    </div>
+</div>
+
+<script>
+let cooldown = false;
+
+async function generate() {
+    const btn = document.getElementById("genBtn");
+    const inputText = document.getElementById("inputBox").value;
+
+    if (!inputText.trim()) {
+        alert("请输入产品信息！");
+        return;
+    }
+
+    if (cooldown) {
+        alert("请等待 5 秒后再生成！");
+        return;
+    }
+
+    cooldown = true;
+    btn.disabled = true;
+    btn.innerText = "生成中...";
+
+    document.getElementById("title").innerText = "正在生成...";
+    document.getElementById("bulletPoint").innerText = "正在生成...";
+    document.getElementById("description").innerText = "正在生成...";
+
+    try {
+        const res = await fetch("https://u5ohkglvw7.execute-api.us-west-2.amazonaws.com/invoke", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ input_text: inputText })
+        });
+
+        const data = await res.json();
+
+        console.log("Raw API Response:", data);
+
+        // 🌟 FIX: data 就是最终数据，不在 data.body 里面
+        const bodyData = data;
+
+        const structured = bodyData.result_structured;
+
+        if (!structured) {
+            document.getElementById("title").innerText = "解析失败";
+            document.getElementById("bulletPoint").innerText = JSON.stringify(bodyData, null, 2);
+            document.getElementById("description").innerText = "API 未返回结构化字段";
+            return;
+        }
+
+        document.getElementById("title").innerText = structured.title || "无标题";
+        document.getElementById("bulletPoint").innerText = (structured.bullet_point || "无要点") + "\n" + (structured.title || "");
+        document.getElementById("description").innerText = (structured.title || "") + "\n" + (structured.description || "无描述");
+
+
+    } catch (e) {
+        document.getElementById("title").innerText = "请求失败：" + e;
+        document.getElementById("bulletPoint").innerText = "请求失败";
+        document.getElementById("description").innerText = "请求失败";
+        console.error("Error details:", e);
+    }
+
+    setTimeout(() => {
+        cooldown = false;
+        btn.disabled = false;
+        btn.innerText = "Generate";
+    }, 5000);
+}
+
+
+function copyToClipboard(elementId) {
+    const content = document.getElementById(elementId).innerText;
+    const btn = event.target;
+    
+    navigator.clipboard.writeText(content).then(() => {
+        const originalText = btn.innerText;
+        btn.innerText = "已复制！";
+        btn.classList.add("copied");
+        
+        setTimeout(() => {
+            btn.innerText = originalText;
+            btn.classList.remove("copied");
+        }, 2000);
+    }).catch(err => {
+        alert("复制失败：" + err);
+    });
+}
+</script>
+</body>
+</html>
