@@ -1,20 +1,28 @@
-name: Deploy Frontend (S3)
+name: Deploy Frontend
 
 on:
   push:
     branches:
-      - main  # Trigger on pushes to the main branch
+      - main
 
 jobs:
   deploy-s3:
     runs-on: ubuntu-latest
 
     steps:
-    # ... (Checkout Code, Configure AWS Credentials steps remain the same) ...
-    
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
     - name: Sync to S3
       run: |
-        # 1. Upload files to S3 (This step is correct)
+        # Syncs the contents of the frontend folder to the root of the bucket
         aws s3 sync . s3://${{ secrets.S3_BUCKET_NAME }} --delete
 
     # --- NEW: Install jq for JSON parsing ---
