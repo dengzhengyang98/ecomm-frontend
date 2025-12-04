@@ -25,10 +25,16 @@ jobs:
         # Syncs the contents of the frontend folder to the root of the bucket
         aws s3 sync . s3://${{ secrets.S3_BUCKET_NAME }} --delete
 
+    - name: Setup Node.js
+      # Set up the Node environment needed to run npm commands
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18' # Use a stable Node version
+
+    - name: Install Amplify CLI
+      # Install the CLI using npm
+      run: npm install -g @aws-amplify/cli
+
     - name: Start Amplify Deployment
-      run: |
-        # 2. Tell Amplify to pull the new content from S3
-        amplify publish \
-          --app-id YOUR_AMPLIFY_APP_ID \
-          --env YOUR_AMPLIFY_BRANCH_NAME \
-          --yes
+      # This command should now be recognized
+      run: amplify publish --app-id ${{ secrets.AMPLIFY_APP_ID }} --env ${{ secrets.AMPLIFY_BRANCH_NAME }} --yes
