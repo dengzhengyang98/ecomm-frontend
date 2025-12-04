@@ -1,33 +1,45 @@
-name: Deploy Frontend
+name: Deploy Frontend (S3)
 
 on:
   push:
     branches:
-      - main
+      - main  # Trigger on pushes to the main branch
 
 jobs:
   deploy-s3:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v3
-
-    - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v2
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ secrets.AWS_REGION }}
-
+    # ... (Checkout Code, Configure AWS Credentials steps remain the same) ...
+    
     - name: Sync to S3
       run: |
-        # Syncs the contents of the frontend folder to the root of the bucket
+        # 1. Upload files to S3 (This step is correct)
         aws s3 sync . s3://${{ secrets.S3_BUCKET_NAME }} --delete
 
-    - name: Start Amplify Deployment
-      # 2. Tell Amplify to pull the new content from S3 (Requires AWS CLI, which is built-in)
+    # --- NEW: Install jq for JSON parsing ---
+    - name: Install jq
+      run: sudo apt-get install -y jq
+
+    - name: Create and Start Amplify Deployment
       run: |
+        # 2. Create the deployment job and capture the jobId
+        DEPLOYMENT_INFO=$(aws amplify create-deployment \
+          --app-id ${{ secrets.AMPLIFY_APP_ID }} \
+          --branch-name ${{ secrets.AMPLIFY_BRANCH_NAME }})
+
+        JOB_ID=$(echo $DEPLOYMENT_INFO | jq -r '.jobId')
+
+        if [ -z "$JOB_ID" ]; then
+          echo "Error: Failed to retrieve jobId from Amplify API."
+          exit 1
+        fi
+
+        echo "Created Amplify Deployment Job ID: $JOB_ID"
+
+        # 3. Start the deployment using the files already in the S3 bucket
         aws amplify start-deployment \
           --app-id ${{ secrets.AMPLIFY_APP_ID }} \
-          --branch-name ${{ secrets.AMPLIFY_BRANCH_NAME }}
+          --branch-name ${{ secrets.AMPLIFY_BRANCH_NAME }} \
+          --job-id $JOB_ID \
+          --source-url http://${{ secrets.S3_BUCKET_NAME }}.s3.${{ secrets.AWS_REGION }}.amazonaws.com/
